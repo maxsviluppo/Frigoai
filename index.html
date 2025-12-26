@@ -13,10 +13,15 @@
         body { font-family: 'Inter', sans-serif; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        @keyframes bounce-slow {
+          0%, 100% { transform: translateY(-5%); }
+          50% { transform: translateY(0); }
+        }
+        .animate-bounce-slow { animation: bounce-slow 3s infinite; }
     </style>
     <script>
-      // Fallback per process.env per prevenire crash immediati
-      window.process = { env: { API_KEY: "" } };
+      // Assicura che process.env esista prima del caricamento dei moduli
+      window.process = window.process || { env: {} };
     </script>
 <script type="importmap">
 {
@@ -34,7 +39,6 @@
 </head>
 <body class="bg-gray-50 text-gray-900">
     <div id="root"></div>
-    <!-- Caricamento esplicito dell'entry point -->
     <script type="module" src="./index.tsx"></script>
 </body>
 </html>

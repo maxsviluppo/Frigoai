@@ -28,7 +28,8 @@ import {
   Filter,
   Key,
   ExternalLink,
-  ShieldCheck
+  ShieldCheck,
+  Info
 } from 'lucide-react';
 import { InventoryItem, ViewState } from './types.ts';
 import { Scanner } from './components/Scanner.tsx';
@@ -81,17 +82,21 @@ const App: React.FC = () => {
           await saveInventoryToDB(initial);
         }
 
-        if (savedNotif === 'true' && Notification.permission === 'granted') {
+        // Check notification status
+        if (savedNotif === 'true' && 'Notification' in window && Notification.permission === 'granted') {
           setNotificationsEnabled(true);
         }
 
-        // Check if API key is already selected
-        if (window.aistudio && typeof window.aistudio.hasSelectedApiKey === 'function') {
+        // Controllo API Key su Vercel e ambiente AI Studio
+        const envKey = process.env.API_KEY;
+        if (envKey && envKey.length > 5) {
+          setHasApiKey(true);
+        } else if (window.aistudio?.hasSelectedApiKey) {
           const selected = await window.aistudio.hasSelectedApiKey();
           setHasApiKey(selected);
         }
       } catch (e) {
-        console.error("Errore caricamento:", e);
+        console.error("Errore inizializzazione:", e);
       } finally {
         setIsInitialLoad(false);
       }
@@ -100,9 +105,12 @@ const App: React.FC = () => {
   }, []);
 
   const handleOpenApiKeySelector = async () => {
-    if (window.aistudio && typeof window.aistudio.openSelectKey === 'function') {
+    if (window.aistudio?.openSelectKey) {
       await window.aistudio.openSelectKey();
+      // Linee guida: assumere successo dopo l'apertura per mitigare race conditions
       setHasApiKey(true);
+    } else {
+      alert("Il selettore nativo non è disponibile in questo browser. Se sei su Vercel, imposta la variabile d'ambiente API_KEY nel pannello di controllo del progetto.");
     }
   };
 
@@ -113,11 +121,22 @@ const App: React.FC = () => {
   }, [inventory, isInitialLoad]);
 
   const requestNotificationPermission = async () => {
-    if (!('Notification' in window)) return;
-    const permission = await Notification.requestPermission();
-    if (permission === 'granted') {
-      setNotificationsEnabled(true);
-      savePreference('fridgemaster_notif_pref', 'true');
+    if (!('Notification' in window)) {
+      alert("Il tuo browser non supporta le notifiche push.");
+      return;
+    }
+    
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        setNotificationsEnabled(true);
+        savePreference('fridgemaster_notif_pref', 'true');
+        new Notification("FrigoMaster AI", { body: "Notifiche attivate con successo!" });
+      } else {
+        alert("Permesso negato. Abilita le notifiche nelle impostazioni del browser.");
+      }
+    } catch (err) {
+      console.error("Errore richiesta notifiche:", err);
     }
   };
 
@@ -401,7 +420,7 @@ const App: React.FC = () => {
                     <div className="flex items-center gap-4">
                       <div className="bg-white/20 p-3 rounded-2xl"><Key className="w-6 h-6" /></div>
                       <div>
-                        <p className="font-black text-sm uppercase tracking-tight">API non configurata</p>
+                        <p className="font-black text-sm uppercase tracking-tight">AI non configurata</p>
                         <p className="text-[10px] opacity-80 font-bold">Abilita AI avanzata ora</p>
                       </div>
                     </div>
@@ -467,7 +486,9 @@ const App: React.FC = () => {
                       </div>
                       <div className="flex-1">
                         <p className="font-black text-gray-900 text-lg">Chiave API Google</p>
-                        <p className="text-xs text-gray-500 font-medium leading-relaxed mt-1">Richiesta per la generazione di immagini Pro e l'analisi avanzata dei barcode.</p>
+                        <p className="text-xs text-gray-500 font-medium leading-relaxed mt-1">
+                          {hasApiKey ? "Configurata correttamente. Utilizzabile per tutte le funzioni AI." : "Richiesta per la generazione di immagini Pro e l'analisi avanzata dei barcode."}
+                        </p>
                       </div>
                     </div>
                     
@@ -479,8 +500,17 @@ const App: React.FC = () => {
                         }`}
                       >
                         <Key className="w-5 h-5" />
-                        {hasApiKey ? 'Modifica Chiave' : 'Seleziona Chiave API'}
+                        {hasApiKey ? 'Aggiorna Chiave' : 'Seleziona Chiave API'}
                       </button>
+
+                      {!window.aistudio && !hasApiKey && (
+                        <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 flex gap-3 items-start">
+                           <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                           <p className="text-[10px] text-amber-800 font-medium leading-relaxed">
+                             Se sei su Vercel e non riesci a usare il pulsante, aggiungi <b>API_KEY</b> nelle impostazioni del tuo progetto.
+                           </p>
+                        </div>
+                      )}
                       
                       <a 
                         href="https://ai.google.dev/gemini-api/docs/billing" 
@@ -501,7 +531,12 @@ const App: React.FC = () => {
                       <div className={`p-5 rounded-3xl ${notificationsEnabled ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-300'}`}>{notificationsEnabled ? <Bell className="w-8 h-8" /> : <BellOff className="w-8 h-8" />}</div>
                       <div><p className="font-black text-gray-900 text-lg">Alert Scadenze</p><p className="text-sm text-gray-500 font-medium">Avviso 3 giorni prima</p></div>
                     </div>
-                    <button onClick={requestNotificationPermission} className={`w-full sm:w-auto px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest ${notificationsEnabled ? 'bg-green-600 text-white shadow-lg' : 'bg-blue-600 text-white shadow-lg'}`}>{notificationsEnabled ? 'ATTIVE' : 'ATTIVA'}</button>
+                    <button 
+                      onClick={requestNotificationPermission} 
+                      className={`w-full sm:w-auto px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${notificationsEnabled ? 'bg-green-600 text-white shadow-lg' : 'bg-blue-600 text-white shadow-lg'}`}
+                    >
+                      {notificationsEnabled ? 'ATTIVE' : 'ATTIVA'}
+                    </button>
                   </div>
                 </section>
               </div>
