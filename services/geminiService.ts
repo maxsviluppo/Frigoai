@@ -7,11 +7,12 @@ export interface InventoryMatch {
 }
 
 const getAI = () => {
+  // Le linee guida richiedono l'uso diretto di process.env.API_KEY
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
     console.warn("ATTENZIONE: API_KEY non configurata nelle variabili d'ambiente.");
   }
-  // Utilizziamo l'istanza più recente per catturare aggiornamenti della chiave
+  // Creiamo una nuova istanza ogni volta come richiesto per garantire l'uso della chiave più recente
   return new GoogleGenAI({ apiKey: apiKey || "" });
 };
 
@@ -22,7 +23,8 @@ const cleanJsonResponse = (text: string) => {
 
 export const identifyProductFromImage = async (base64Images: string | string[]): Promise<any> => {
   const ai = getAI();
-  const model = 'gemini-3-pro-preview'; // Upgrade a Pro per OCR barcode ad alta precisione
+  // Utilizziamo gemini-3-flash-preview per l'OCR: è veloce, preciso e meno soggetto a restrizioni di permessi (403)
+  const model = 'gemini-3-flash-preview';
   const images = Array.isArray(base64Images) ? base64Images : [base64Images];
   
   const imageParts = images.map(data => ({
@@ -76,21 +78,21 @@ export const identifyProductFromImage = async (base64Images: string | string[]):
 
 export const generateAIProductImage = async (productName: string): Promise<string | null> => {
   const ai = getAI();
-  const model = 'gemini-3-pro-image-preview'; // Upgrade a Pro per immagini 1K/2K fotorealistiche
+  // Utilizziamo gemini-2.5-flash-image invece della versione Pro per evitare errori 403 su Vercel con chiavi standard
+  const model = 'gemini-2.5-flash-image'; 
   try {
     const response = await ai.models.generateContent({
       model,
       contents: {
         parts: [
           {
-            text: `Generate a professional, clean, high-quality studio photograph of ${productName} on a neutral light background. Packshot style, centered. Realistic lighting and materials.`,
+            text: `Generate a professional, clean, high-quality studio photograph of ${productName} on a neutral light background. Packshot style, centered. Realistic lighting.`,
           },
         ],
       },
       config: {
         imageConfig: {
-          aspectRatio: "1:1",
-          imageSize: "1K"
+          aspectRatio: "1:1"
         }
       }
     });
@@ -103,7 +105,7 @@ export const generateAIProductImage = async (productName: string): Promise<strin
     return null;
   } catch (error) {
     console.error("Errore generateAIProductImage:", error);
-    return null;
+    throw error; // Rilanciamo l'errore per gestirlo nella UI
   }
 };
 
@@ -159,7 +161,8 @@ export const matchImageToInventory = async (base64Image: string, inventoryNames:
 
 export const editProductImage = async (base64Image: string, prompt: string): Promise<string | null> => {
   const ai = getAI();
-  const model = 'gemini-3-pro-image-preview'; // Upgrade a Pro per fotoritocco avanzato
+  // Utilizziamo gemini-2.5-flash-image per l'editing per massima compatibilità
+  const model = 'gemini-2.5-flash-image'; 
   try {
     const response = await ai.models.generateContent({
       model,
@@ -169,12 +172,6 @@ export const editProductImage = async (base64Image: string, prompt: string): Pro
           { text: prompt },
         ],
       },
-      config: {
-        imageConfig: {
-          aspectRatio: "1:1",
-          imageSize: "1K"
-        }
-      }
     });
     for (const part of response.candidates[0].content.parts) {
       if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;

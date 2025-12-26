@@ -51,6 +51,7 @@ const App: React.FC = () => {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [hasApiKey, setHasApiKey] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'fridge' | 'freezer' | 'dispensa'>('all');
   const [selectedExpiry, setSelectedExpiry] = useState<'all' | 'expired' | 'today' | 'near'>('all');
@@ -82,16 +83,16 @@ const App: React.FC = () => {
           await saveInventoryToDB(initial);
         }
 
-        // Check notification status
+        // Controllo stato notifiche
         if (savedNotif === 'true' && 'Notification' in window && Notification.permission === 'granted') {
           setNotificationsEnabled(true);
         }
 
-        // Controllo API Key su Vercel e ambiente AI Studio
-        const envKey = process.env.API_KEY;
-        if (envKey && envKey.length > 5) {
+        // Controllo API Key su Vercel o ambiente AI Studio
+        // Se process.env.API_KEY è presente, lo consideriamo come chiave valida configurata dall'esterno
+        if (process.env.API_KEY && process.env.API_KEY.length > 5) {
           setHasApiKey(true);
-        } else if (window.aistudio?.hasSelectedApiKey) {
+        } else if (window.aistudio && typeof window.aistudio.hasSelectedApiKey === 'function') {
           const selected = await window.aistudio.hasSelectedApiKey();
           setHasApiKey(selected);
         }
@@ -105,12 +106,16 @@ const App: React.FC = () => {
   }, []);
 
   const handleOpenApiKeySelector = async () => {
-    if (window.aistudio?.openSelectKey) {
-      await window.aistudio.openSelectKey();
-      // Linee guida: assumere successo dopo l'apertura per mitigare race conditions
-      setHasApiKey(true);
+    if (window.aistudio && typeof window.aistudio.openSelectKey === 'function') {
+      try {
+        await window.aistudio.openSelectKey();
+        // Linee guida: assumere successo dopo l'apertura
+        setHasApiKey(true);
+      } catch (e) {
+        console.error("Errore selettore API:", e);
+      }
     } else {
-      alert("Il selettore nativo non è disponibile in questo browser. Se sei su Vercel, imposta la variabile d'ambiente API_KEY nel pannello di controllo del progetto.");
+      alert("Il selettore nativo è disponibile solo in Google AI Studio. Su Vercel, configura API_KEY nelle Environment Variables del progetto.");
     }
   };
 
@@ -122,7 +127,7 @@ const App: React.FC = () => {
 
   const requestNotificationPermission = async () => {
     if (!('Notification' in window)) {
-      alert("Il tuo browser non supporta le notifiche push.");
+      alert("Il tuo browser non supporta le notifiche.");
       return;
     }
     
@@ -131,12 +136,12 @@ const App: React.FC = () => {
       if (permission === 'granted') {
         setNotificationsEnabled(true);
         savePreference('fridgemaster_notif_pref', 'true');
-        new Notification("FrigoMaster AI", { body: "Notifiche attivate con successo!" });
+        new Notification("FrigoMaster AI", { body: "Notifiche attivate correttamente!" });
       } else {
-        alert("Permesso negato. Abilita le notifiche nelle impostazioni del browser.");
+        alert("Permesso notifiche negato.");
       }
     } catch (err) {
-      console.error("Errore richiesta notifiche:", err);
+      console.error("Errore notifiche:", err);
     }
   };
 
@@ -216,10 +221,18 @@ const App: React.FC = () => {
   const handleGenerateAIImage = async () => {
     if (!editingItem?.name) return;
     setIsGeneratingImage(true);
+    setErrorMessage(null);
     try {
       const imageUrl = await generateAIProductImage(editingItem.name);
       if (imageUrl && confirm("Vuoi usare questa immagine generata dall'AI?")) {
         setEditingItem(prev => ({ ...prev, image: imageUrl }));
+      }
+    } catch (err: any) {
+      console.error("Errore generazione immagine:", err);
+      if (err.message?.includes("403")) {
+        setErrorMessage("Errore 403: La tua chiave API non ha i permessi per generare immagini. Se sei in AI Studio, usa il pulsante 'Seleziona Chiave API' nelle impostazioni.");
+      } else {
+        setErrorMessage("L'AI non è riuscita a generare l'immagine. Verifica la tua connessione o la chiave API.");
       }
     } finally {
       setIsGeneratingImage(false);
@@ -234,7 +247,7 @@ const App: React.FC = () => {
           <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">{filteredInventory.length} Prodotti filtrati</p>
         </div>
         <button 
-          onClick={() => { setEditingItem({ quantity: 1, category: 'fridge' }); setShowAddModal(true); }}
+          onClick={() => { setEditingItem({ quantity: 1, category: 'fridge' }); setShowAddModal(true); setErrorMessage(null); }}
           className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg active:scale-95 transition-all"
         >
           <Plus className="w-6 h-6" />
@@ -387,7 +400,7 @@ const App: React.FC = () => {
                             <button onClick={(e) => { e.stopPropagation(); updateItem(item.id, { quantity: item.quantity + 1 }); }} className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center bg-white hover:bg-gray-100 transition-all font-black text-gray-500">+</button>
                           </div>
                           <div className="flex gap-2">
-                            <button onClick={(e) => { e.stopPropagation(); setEditingItem(item); setShowAddModal(true); }} className="flex-1 py-4 bg-white border border-gray-200 rounded-2xl text-[10px] font-black uppercase text-gray-600 flex items-center justify-center space-x-2 hover:bg-gray-50 transition-all"><Edit2 className="w-3.5 h-3.5" /><span>Edit</span></button>
+                            <button onClick={(e) => { e.stopPropagation(); setEditingItem(item); setShowAddModal(true); setErrorMessage(null); }} className="flex-1 py-4 bg-white border border-gray-200 rounded-2xl text-[10px] font-black uppercase text-gray-600 flex items-center justify-center space-x-2 hover:bg-gray-50 transition-all"><Edit2 className="w-3.5 h-3.5" /><span>Edit</span></button>
                             <button onClick={(e) => { e.stopPropagation(); removeItem(item.id); }} className="flex-1 py-4 bg-red-50 border border-red-100 rounded-2xl text-[10px] font-black uppercase text-red-600 flex items-center justify-center space-x-2 hover:bg-red-100 transition-all"><Trash2 className="w-3.5 h-3.5" /><span>Elimina</span></button>
                           </div>
                         </div>
@@ -487,7 +500,7 @@ const App: React.FC = () => {
                       <div className="flex-1">
                         <p className="font-black text-gray-900 text-lg">Chiave API Google</p>
                         <p className="text-xs text-gray-500 font-medium leading-relaxed mt-1">
-                          {hasApiKey ? "Configurata correttamente. Utilizzabile per tutte le funzioni AI." : "Richiesta per la generazione di immagini Pro e l'analisi avanzata dei barcode."}
+                          {hasApiKey ? "Configurata correttamente. Utilizzabile per tutte le funzioni AI." : "Richiesta per la generazione di immagini e l'analisi avanzata dei barcode."}
                         </p>
                       </div>
                     </div>
@@ -503,11 +516,11 @@ const App: React.FC = () => {
                         {hasApiKey ? 'Aggiorna Chiave' : 'Seleziona Chiave API'}
                       </button>
 
-                      {!window.aistudio && !hasApiKey && (
+                      {!hasApiKey && (
                         <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 flex gap-3 items-start">
                            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                            <p className="text-[10px] text-amber-800 font-medium leading-relaxed">
-                             Se sei su Vercel e non riesci a usare il pulsante, aggiungi <b>API_KEY</b> nelle impostazioni del tuo progetto.
+                             Se sei su Vercel, assicurati di configurare la variabile <b>API_KEY</b> nel pannello Environment Variables del tuo progetto.
                            </p>
                         </div>
                       )}
@@ -561,6 +574,14 @@ const App: React.FC = () => {
               <div><h2 className="text-2xl font-black text-gray-900">{editingItem?.id ? 'Modifica Prodotto' : 'Nuovo Prodotto'}</h2><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Dati Prodotto</p></div>
               <button onClick={() => setShowAddModal(false)} className="p-2.5 bg-gray-50 rounded-full text-gray-400"><X className="w-5 h-5" /></button>
             </div>
+            
+            {errorMessage && (
+              <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3 animate-in fade-in slide-in-from-top-2">
+                 <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
+                 <p className="text-xs text-red-700 font-bold">{errorMessage}</p>
+              </div>
+            )}
+
             <div className="space-y-6">
               <div className="flex flex-col items-center gap-6">
                 <div className="w-40 h-40 rounded-[2.5rem] overflow-hidden border-4 border-gray-50 shadow-xl bg-gray-50 flex items-center justify-center relative">
@@ -582,7 +603,7 @@ const App: React.FC = () => {
               </div>
             </div>
             <div className="flex gap-4 pt-4">
-              <button onClick={() => setShowAddModal(false)} className="flex-1 py-5 bg-gray-50 text-gray-400 rounded-[2rem] font-black text-xs uppercase">Annulla</button>
+              <button onClick={() => { setShowAddModal(false); setErrorMessage(null); }} className="flex-1 py-5 bg-gray-50 text-gray-400 rounded-[2rem] font-black text-xs uppercase">Annulla</button>
               <button onClick={() => editingItem?.id ? updateItem(editingItem.id, editingItem) : handleAddItem(editingItem || {})} className="flex-[2] py-5 bg-blue-600 text-white rounded-[2rem] font-black text-xs uppercase shadow-xl">{editingItem?.id ? 'Conferma' : 'Aggiungi'}</button>
             </div>
           </div>
