@@ -1,0 +1,7 @@
+{
+  "name": "FridgeMaster AI",
+  "description": "Gestione intelligente dell'inventario con scansione codici a barre tramite AI, tracciamento scadenze e fotoritocco avanzato per i tuoi prodotti in cucina.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
