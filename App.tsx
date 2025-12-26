@@ -29,7 +29,8 @@ import {
   Key,
   ExternalLink,
   ShieldCheck,
-  Info
+  Info,
+  Wand2
 } from 'lucide-react';
 import { InventoryItem, ViewState } from './types.ts';
 import { Scanner } from './components/Scanner.tsx';
@@ -45,7 +46,6 @@ const App: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingItem, setEditingItem] = useState<Partial<InventoryItem> | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showPhotoEditor, setShowPhotoEditor] = useState(false);
   const [showVisualSearch, setShowVisualSearch] = useState(false);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
@@ -83,13 +83,10 @@ const App: React.FC = () => {
           await saveInventoryToDB(initial);
         }
 
-        // Controllo stato notifiche
         if (savedNotif === 'true' && 'Notification' in window && Notification.permission === 'granted') {
           setNotificationsEnabled(true);
         }
 
-        // Controllo API Key su Vercel o ambiente AI Studio
-        // Se process.env.API_KEY è presente, lo consideriamo come chiave valida configurata dall'esterno
         if (process.env.API_KEY && process.env.API_KEY.length > 5) {
           setHasApiKey(true);
         } else if (window.aistudio && typeof window.aistudio.hasSelectedApiKey === 'function') {
@@ -109,7 +106,6 @@ const App: React.FC = () => {
     if (window.aistudio && typeof window.aistudio.openSelectKey === 'function') {
       try {
         await window.aistudio.openSelectKey();
-        // Linee guida: assumere successo dopo l'apertura
         setHasApiKey(true);
       } catch (e) {
         console.error("Errore selettore API:", e);
@@ -230,9 +226,9 @@ const App: React.FC = () => {
     } catch (err: any) {
       console.error("Errore generazione immagine:", err);
       if (err.message?.includes("403")) {
-        setErrorMessage("Errore 403: La tua chiave API non ha i permessi per generare immagini. Se sei in AI Studio, usa il pulsante 'Seleziona Chiave API' nelle impostazioni.");
+        setErrorMessage("Errore 403: La tua chiave API non ha i permessi per generare immagini.");
       } else {
-        setErrorMessage("L'AI non è riuscita a generare l'immagine. Verifica la tua connessione o la chiave API.");
+        setErrorMessage("L'AI non è riuscita a generare l'immagine. Verifica la tua connessione.");
       }
     } finally {
       setIsGeneratingImage(false);
@@ -327,12 +323,6 @@ const App: React.FC = () => {
               <Package className="w-10 h-10 text-gray-200" />
             </div>
             <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">Nessun prodotto trovato</p>
-            <button 
-              onClick={() => { setSelectedCategory('all'); setSelectedExpiry('all'); setSearchQuery(''); }}
-              className="text-blue-600 text-xs font-black uppercase underline decoration-2 underline-offset-4"
-            >
-              Reset filtri
-            </button>
           </div>
         ) : (
           filteredInventory.map(item => {
@@ -482,7 +472,21 @@ const App: React.FC = () => {
                 </section>
               </div>
             )}
+
             {activeView === 'inventory' && renderInventory()}
+
+            {activeView === 'editor' && (
+              <div className="pb-24 animate-in fade-in duration-500">
+                <PhotoEditor 
+                  onSave={(img) => {
+                    setEditingItem({ image: img, quantity: 1, category: 'fridge' });
+                    setShowAddModal(true);
+                  }} 
+                  onClose={() => setActiveView('dashboard')} 
+                />
+              </div>
+            )}
+
             {activeView === 'settings' && (
               <div className="space-y-10 pb-24 animate-in fade-in duration-500">
                 <h1 className="text-2xl font-black text-gray-900 tracking-tight">Impostazioni</h1>
@@ -562,7 +566,7 @@ const App: React.FC = () => {
         <button onClick={() => setActiveView('dashboard')} className={`flex flex-col items-center space-y-1.5 ${activeView === 'dashboard' ? 'text-blue-600' : 'text-gray-300'}`}><LayoutDashboard className="w-6 h-6" /><span className="text-[9px] font-black uppercase">Home</span></button>
         <button onClick={() => setActiveView('inventory')} className={`flex flex-col items-center space-y-1.5 ${activeView === 'inventory' ? 'text-blue-600' : 'text-gray-300'}`}><Package className="w-6 h-6" /><span className="text-[9px] font-black uppercase">Scorte</span></button>
         <div className="relative -top-10"><button onClick={() => setActiveView('scanner')} className="w-16 h-16 bg-blue-600 text-white rounded-3xl shadow-2xl flex items-center justify-center active:scale-90 transition-all"><ScanLine className="w-8 h-8" /></button></div>
-        <button onClick={() => setShowPhotoEditor(true)} className="flex flex-col items-center space-y-1.5 text-gray-300"><ImageIcon className="w-6 h-6" /><span className="text-[9px] font-black uppercase">AI Edit</span></button>
+        <button onClick={() => setActiveView('editor')} className={`flex flex-col items-center space-y-1.5 ${activeView === 'editor' ? 'text-blue-600' : 'text-gray-300'}`}><ImageIcon className="w-6 h-6" /><span className="text-[9px] font-black uppercase">AI Edit</span></button>
         <button onClick={() => setActiveView('settings')} className={`flex flex-col items-center space-y-1.5 ${activeView === 'settings' ? 'text-blue-600' : 'text-gray-300'}`}><Settings className="w-6 h-6" /><span className="text-[9px] font-black uppercase">Setup</span></button>
       </nav>
 
@@ -612,7 +616,6 @@ const App: React.FC = () => {
 
       {showVisualSearch && <VisualSearch inventoryNames={inventory.map(i => i.name)} onMatch={(name) => { setSearchQuery(name); setShowVisualSearch(false); setActiveView('inventory'); const m = inventory.find(i => i.name === name); if (m) setExpandedItemId(m.id); }} onClose={() => setShowVisualSearch(false)} />}
       {activeView === 'scanner' && <Scanner onScanComplete={(data) => { setEditingItem({ name: data.name, barcode: data.barcode, category: data.category as any || 'fridge', quantity: 1 }); setShowAddModal(true); setActiveView('inventory'); }} onCancel={() => setActiveView('dashboard')} />}
-      {showPhotoEditor && <div className="fixed inset-0 z-[60] p-6 bg-black/90 flex items-center justify-center"><div className="w-full max-w-xl h-[90vh]"><PhotoEditor initialImage={editingItem?.image} onSave={(img) => { if (editingItem?.id) updateItem(editingItem.id, { image: img }); else setEditingItem(p => ({ ...p, image: img })); setShowPhotoEditor(false); setShowAddModal(true); }} onClose={() => setShowPhotoEditor(false)} /></div></div>}
     </div>
   );
 };

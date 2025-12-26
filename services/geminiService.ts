@@ -6,24 +6,15 @@ export interface InventoryMatch {
   confidence: number;
 }
 
-const getAI = () => {
-  // Le linee guida richiedono l'uso diretto di process.env.API_KEY
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    console.warn("ATTENZIONE: API_KEY non configurata nelle variabili d'ambiente.");
-  }
-  // Creiamo una nuova istanza ogni volta come richiesto per garantire l'uso della chiave più recente
-  return new GoogleGenAI({ apiKey: apiKey || "" });
-};
-
 // Funzione helper per pulire il JSON dalle risposte del modello
 const cleanJsonResponse = (text: string) => {
   return text.replace(/```json/g, "").replace(/```/g, "").trim();
 };
 
 export const identifyProductFromImage = async (base64Images: string | string[]): Promise<any> => {
-  const ai = getAI();
-  // Utilizziamo gemini-3-flash-preview per l'OCR: è veloce, preciso e meno soggetto a restrizioni di permessi (403)
+  // Use process.env.API_KEY directly and create new instance per call as required
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Utilizziamo gemini-3-flash-preview per l'OCR
   const model = 'gemini-3-flash-preview';
   const images = Array.isArray(base64Images) ? base64Images : [base64Images];
   
@@ -69,7 +60,8 @@ export const identifyProductFromImage = async (base64Images: string | string[]):
       }
     });
 
-    return JSON.parse(cleanJsonResponse(response.text));
+    const jsonStr = response.text.trim();
+    return JSON.parse(cleanJsonResponse(jsonStr));
   } catch (error) {
     console.error("Errore identifyProductFromImage:", error);
     throw error;
@@ -77,8 +69,9 @@ export const identifyProductFromImage = async (base64Images: string | string[]):
 };
 
 export const generateAIProductImage = async (productName: string): Promise<string | null> => {
-  const ai = getAI();
-  // Utilizziamo gemini-2.5-flash-image invece della versione Pro per evitare errori 403 su Vercel con chiavi standard
+  // Use process.env.API_KEY directly and create new instance per call as required
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Utilizziamo gemini-2.5-flash-image per la generazione di immagini
   const model = 'gemini-2.5-flash-image'; 
   try {
     const response = await ai.models.generateContent({
@@ -98,6 +91,7 @@ export const generateAIProductImage = async (productName: string): Promise<strin
     });
 
     for (const part of response.candidates[0].content.parts) {
+      // Find the image part as per guidelines
       if (part.inlineData) {
         return `data:image/png;base64,${part.inlineData.data}`;
       }
@@ -105,12 +99,13 @@ export const generateAIProductImage = async (productName: string): Promise<strin
     return null;
   } catch (error) {
     console.error("Errore generateAIProductImage:", error);
-    throw error; // Rilanciamo l'errore per gestirlo nella UI
+    throw error;
   }
 };
 
 export const matchImageToInventory = async (base64Image: string, inventoryNames: string[]): Promise<InventoryMatch[]> => {
-  const ai = getAI();
+  // Use process.env.API_KEY directly and create new instance per call as required
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const model = 'gemini-3-flash-preview';
   
   try {
@@ -151,7 +146,8 @@ export const matchImageToInventory = async (base64Image: string, inventoryNames:
       }
     });
 
-    const data = JSON.parse(cleanJsonResponse(response.text));
+    const jsonStr = response.text.trim();
+    const data = JSON.parse(cleanJsonResponse(jsonStr));
     return (data.matches || []).sort((a: any, b: any) => b.confidence - a.confidence);
   } catch (e) {
     console.error("Errore matchImageToInventory:", e);
@@ -160,8 +156,9 @@ export const matchImageToInventory = async (base64Image: string, inventoryNames:
 };
 
 export const editProductImage = async (base64Image: string, prompt: string): Promise<string | null> => {
-  const ai = getAI();
-  // Utilizziamo gemini-2.5-flash-image per l'editing per massima compatibilità
+  // Use process.env.API_KEY directly and create new instance per call as required
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Utilizziamo gemini-2.5-flash-image per l'editing
   const model = 'gemini-2.5-flash-image'; 
   try {
     const response = await ai.models.generateContent({
@@ -174,6 +171,7 @@ export const editProductImage = async (base64Image: string, prompt: string): Pro
       },
     });
     for (const part of response.candidates[0].content.parts) {
+      // Find the image part as per guidelines
       if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
     }
     return null;
