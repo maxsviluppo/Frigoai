@@ -25,7 +25,10 @@ import {
   Loader2,
   MapPin,
   CalendarDays,
-  Filter
+  Filter,
+  Key,
+  ExternalLink,
+  ShieldCheck
 } from 'lucide-react';
 import { InventoryItem, ViewState } from './types.ts';
 import { Scanner } from './components/Scanner.tsx';
@@ -46,6 +49,7 @@ const App: React.FC = () => {
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [hasApiKey, setHasApiKey] = useState<boolean>(false);
   
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'fridge' | 'freezer' | 'dispensa'>('all');
   const [selectedExpiry, setSelectedExpiry] = useState<'all' | 'expired' | 'today' | 'near'>('all');
@@ -80,14 +84,27 @@ const App: React.FC = () => {
         if (savedNotif === 'true' && Notification.permission === 'granted') {
           setNotificationsEnabled(true);
         }
+
+        // Check if API key is already selected
+        if (window.aistudio && typeof window.aistudio.hasSelectedApiKey === 'function') {
+          const selected = await window.aistudio.hasSelectedApiKey();
+          setHasApiKey(selected);
+        }
       } catch (e) {
-        console.error("Errore caricamento DB:", e);
+        console.error("Errore caricamento:", e);
       } finally {
         setIsInitialLoad(false);
       }
     };
     init();
   }, []);
+
+  const handleOpenApiKeySelector = async () => {
+    if (window.aistudio && typeof window.aistudio.openSelectKey === 'function') {
+      await window.aistudio.openSelectKey();
+      setHasApiKey(true);
+    }
+  };
 
   useEffect(() => {
     if (!isInitialLoad) {
@@ -379,6 +396,19 @@ const App: React.FC = () => {
           <>
             {activeView === 'dashboard' && (
               <div className="space-y-6 pb-24 animate-in fade-in duration-500">
+                {!hasApiKey && (
+                  <div className="bg-indigo-600 p-6 rounded-3xl text-white shadow-xl shadow-indigo-100 flex items-center justify-between gap-4 animate-bounce-slow">
+                    <div className="flex items-center gap-4">
+                      <div className="bg-white/20 p-3 rounded-2xl"><Key className="w-6 h-6" /></div>
+                      <div>
+                        <p className="font-black text-sm uppercase tracking-tight">API non configurata</p>
+                        <p className="text-[10px] opacity-80 font-bold">Abilita AI avanzata ora</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setActiveView('settings')} className="px-4 py-2 bg-white text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg">Configura</button>
+                  </div>
+                )}
+                
                 <div className="flex items-center justify-between mb-2">
                   <div><h1 className="text-2xl font-black text-gray-900 tracking-tight">La mia cucina</h1><p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Dashboard AI</p></div>
                   <button onClick={() => setActiveView('scanner')} className="p-3 bg-blue-600 text-white rounded-full shadow-lg active:scale-95 transition-all"><ScanLine className="w-6 h-6" /></button>
@@ -422,8 +452,48 @@ const App: React.FC = () => {
             )}
             {activeView === 'inventory' && renderInventory()}
             {activeView === 'settings' && (
-              <div className="space-y-8 pb-24 animate-in fade-in duration-500">
+              <div className="space-y-10 pb-24 animate-in fade-in duration-500">
                 <h1 className="text-2xl font-black text-gray-900 tracking-tight">Impostazioni</h1>
+                
+                <section className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Configurazione API</h2>
+                    {hasApiKey && <span className="flex items-center gap-1 text-[9px] font-black text-green-600 uppercase tracking-widest"><ShieldCheck className="w-3 h-3" /> Attiva</span>}
+                  </div>
+                  <div className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm space-y-6">
+                    <div className="flex items-start space-x-6">
+                      <div className={`p-5 rounded-3xl ${hasApiKey ? 'bg-green-50 text-green-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                        <Key className={`w-8 h-8 ${!hasApiKey ? 'animate-pulse' : ''}`} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-black text-gray-900 text-lg">Chiave API Google</p>
+                        <p className="text-xs text-gray-500 font-medium leading-relaxed mt-1">Richiesta per la generazione di immagini Pro e l'analisi avanzata dei barcode.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="pt-2 flex flex-col gap-3">
+                      <button 
+                        onClick={handleOpenApiKeySelector} 
+                        className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${
+                          hasApiKey ? 'bg-gray-900 text-white shadow-lg' : 'bg-indigo-600 text-white shadow-xl shadow-indigo-100'
+                        }`}
+                      >
+                        <Key className="w-5 h-5" />
+                        {hasApiKey ? 'Modifica Chiave' : 'Seleziona Chiave API'}
+                      </button>
+                      
+                      <a 
+                        href="https://ai.google.dev/gemini-api/docs/billing" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 py-3 text-[10px] font-black text-gray-400 hover:text-indigo-600 transition-colors uppercase tracking-widest"
+                      >
+                        Info Fatturazione Google <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  </div>
+                </section>
+
                 <section className="space-y-4">
                   <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Notifiche Smart</h2>
                   <div className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-6">
