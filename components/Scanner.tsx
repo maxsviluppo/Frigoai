@@ -1,7 +1,7 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { Camera, RefreshCw, X, Loader2, Zap, ZapOff, AlertCircle } from 'lucide-react';
-import { identifyProductFromImage } from '../services/geminiService';
+import { identifyProductFromImage } from '../services/geminiService.ts';
 
 interface ScannerProps {
   onScanComplete: (data: any) => void;
@@ -16,15 +16,13 @@ export const Scanner: React.FC<ScannerProps> = ({ onScanComplete, onCancel }) =>
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isBurstMode, setIsBurstMode] = useState(false);
-  const [burstProgress, setBurstProgress] = useState(0);
   const [isFlashing, setIsFlashing] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
 
-  // Effetto per collegare lo stream al video quando entrambi sono pronti
   useEffect(() => {
     if (isCameraActive && streamRef.current && videoRef.current) {
       videoRef.current.srcObject = streamRef.current;
-      videoRef.current.play().catch(e => console.error("Errore auto-play:", e));
+      videoRef.current.play().catch(e => console.error("Errore video.play():", e));
     }
   }, [isCameraActive]);
 
@@ -37,7 +35,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScanComplete, onCancel }) =>
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => {
         track.stop();
-        console.log("Hardware camera disattivato:", track.label);
+        console.log("Track camera fermato:", track.label);
       });
       streamRef.current = null;
     }
@@ -51,7 +49,6 @@ export const Scanner: React.FC<ScannerProps> = ({ onScanComplete, onCancel }) =>
     setError(null);
     stopCamera();
     try {
-      // Impostato facingMode: 'environment' per la telecamera esterna
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: 'environment',
@@ -62,8 +59,8 @@ export const Scanner: React.FC<ScannerProps> = ({ onScanComplete, onCancel }) =>
       streamRef.current = mediaStream;
       setIsCameraActive(true);
     } catch (err) {
-      console.error(err);
-      setError("Impossibile attivare la telecamera esterna. Verifica i permessi.");
+      console.error("Errore camera:", err);
+      setError("Impossibile attivare la fotocamera. Verifica i permessi nelle impostazioni del browser.");
     }
   };
 
@@ -77,45 +74,47 @@ export const Scanner: React.FC<ScannerProps> = ({ onScanComplete, onCancel }) =>
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
     
-    // Cattura il frame reale (senza mirror)
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.95).split(',')[1];
+    return canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
   };
 
   const captureAndIdentify = async () => {
-    if (!streamRef.current || !isCameraActive) return;
+    if (!streamRef.current || !isCameraActive || loading) return;
 
     setLoading(true);
+    setError(null);
     const capturedImages: string[] = [];
 
     try {
       if (isBurstMode) {
         for (let i = 0; i < 3; i++) {
-          setBurstProgress(i + 1);
           setIsFlashing(true);
-          setTimeout(() => setIsFlashing(false), 100);
+          setTimeout(() => setIsFlashing(false), 50);
           const frame = takeFrame();
           if (frame) capturedImages.push(frame);
-          if (i < 2) await new Promise(r => setTimeout(r, 800));
+          if (i < 2) await new Promise(r => setTimeout(r, 600));
         }
       } else {
         setIsFlashing(true);
-        setTimeout(() => setIsFlashing(false), 100);
+        setTimeout(() => setIsFlashing(false), 50);
         const frame = takeFrame();
         if (frame) capturedImages.push(frame);
       }
 
-      // STACCA IMMEDIATAMENTE LA TELECAMERA dopo lo scatto per privacy e batteria
+      // Spegniamo la camera SUBITO dopo aver preso i frame
       stopCamera();
 
+      // Se la chiave API non è presente, fallirà qui
       const result = await identifyProductFromImage(capturedImages);
       onScanComplete(result);
-    } catch (err) {
-      setError("Errore AI: Non è stato possibile leggere i numeri. Prova ad avvicinarti o usa il Flash.");
-      startCamera(); 
-    } finally {
+    } catch (err: any) {
+      console.error("Errore durante la scansione:", err);
+      setError(err.message?.includes("API_KEY") 
+        ? "Errore: Chiave API Gemini non configurata su Vercel." 
+        : "L'AI non è riuscita a leggere i numeri. Assicurati che il codice sia ben illuminato.");
+      // Riattiviamo la camera solo se l'analisi fallisce
+      startCamera();
       setLoading(false);
-      setBurstProgress(0);
     }
   };
 
@@ -127,8 +126,6 @@ export const Scanner: React.FC<ScannerProps> = ({ onScanComplete, onCancel }) =>
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center p-4">
       <div className="relative w-full max-w-md aspect-[3/4] overflow-hidden rounded-[2.5rem] bg-gray-950 border-4 border-white/5 shadow-2xl">
-        
-        {/* Rimosso scale-x-[-1] perché usiamo la camera esterna */}
         <video
           ref={videoRef}
           autoPlay
@@ -142,29 +139,27 @@ export const Scanner: React.FC<ScannerProps> = ({ onScanComplete, onCancel }) =>
              <div className="w-12 h-12 rounded-full border-2 border-gray-800 flex items-center justify-center animate-pulse">
                 <Camera className="w-6 h-6" />
              </div>
-             <p className="text-[10px] uppercase font-black tracking-[0.2em]">Sensore Standby</p>
+             <p className="text-[10px] uppercase font-black tracking-[0.2em]">Fotocamera Inattiva</p>
           </div>
         )}
         
-        {isFlashing && <div className="absolute inset-0 bg-white z-10 animate-pulse" />}
+        {isFlashing && <div className="absolute inset-0 bg-white z-10" />}
 
-        {/* Zona di Scan Mirata */}
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <div className={`w-4/5 h-40 border-2 rounded-3xl relative flex flex-col items-center justify-center transition-colors ${isCameraActive ? 'border-white/30' : 'border-white/5'}`}>
+          <div className={`w-4/5 h-40 border-2 rounded-3xl relative flex flex-col items-center justify-center transition-colors ${isCameraActive ? 'border-blue-500/50' : 'border-white/5'}`}>
              <div className="absolute inset-x-0 h-[2px] bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)] opacity-80"></div>
-             
              <div className="mt-16 w-full p-2 bg-blue-600/20 backdrop-blur-sm border-t border-blue-400/30 text-center">
-                <span className="text-[10px] font-black text-blue-200 uppercase tracking-widest">Inquadra i numeri qui</span>
+                <span className="text-[10px] font-black text-blue-200 uppercase tracking-widest">Inquadra i numeri</span>
              </div>
           </div>
         </div>
 
         {loading && (
-          <div className="absolute inset-0 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center text-white p-8 text-center z-30">
+          <div className="absolute inset-0 bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center text-white p-8 text-center z-30 animate-in fade-in">
             <Loader2 className="w-16 h-16 animate-spin text-blue-500 mb-6" />
             <div className="space-y-2">
-              <p className="text-2xl font-black tracking-tighter">LETTURA OCR...</p>
-              <p className="text-sm text-gray-400 font-medium italic">Hardware spento. Analisi numeri italiani...</p>
+              <p className="text-2xl font-black tracking-tighter uppercase">Analisi AI...</p>
+              <p className="text-sm text-gray-400 font-medium italic">Riconoscimento prodotto in corso</p>
             </div>
           </div>
         )}
@@ -183,20 +178,20 @@ export const Scanner: React.FC<ScannerProps> = ({ onScanComplete, onCancel }) =>
         </button>
         
         <div className="text-right">
-          <p className="text-white font-black text-xs uppercase tracking-tighter">Cam Esterna</p>
-          <p className="text-gray-500 text-[9px] font-bold uppercase tracking-widest">Auto-Kill Stream</p>
+          <p className="text-white font-black text-xs uppercase tracking-tighter">Telecamera</p>
+          <p className="text-gray-500 text-[9px] font-bold uppercase tracking-widest">Posteriore</p>
         </div>
       </div>
 
       {error && (
-        <div className="mt-4 p-4 bg-red-500/20 border border-red-500/50 text-red-100 rounded-2xl text-xs font-bold text-center flex items-center gap-2 max-w-md">
+        <div className="mt-4 p-4 bg-red-500/20 border border-red-500/50 text-red-100 rounded-2xl text-xs font-bold text-center flex items-center gap-2 max-w-md animate-in slide-in-from-top-2">
           <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
           <span>{error}</span>
         </div>
       )}
 
       <div className="mt-8 flex items-center gap-10">
-        <button onClick={handleCancel} className="p-5 bg-white/5 text-white rounded-full border border-white/10 active:scale-90 transition-transform">
+        <button onClick={handleCancel} disabled={loading} className="p-5 bg-white/5 text-white rounded-full border border-white/10 active:scale-90 transition-transform disabled:opacity-30">
           <X className="w-7 h-7" />
         </button>
         
@@ -210,7 +205,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScanComplete, onCancel }) =>
           <Camera className="w-12 h-12" />
         </button>
 
-        <button onClick={startCamera} className={`p-5 rounded-full border border-white/10 active:scale-90 transition-all ${!isCameraActive && !loading ? 'bg-blue-600 text-white animate-bounce' : 'bg-white/5 text-white'}`}>
+        <button onClick={startCamera} disabled={loading} className={`p-5 rounded-full border border-white/10 active:scale-90 transition-all ${!isCameraActive && !loading ? 'bg-blue-600 text-white animate-bounce' : 'bg-white/5 text-white'}`}>
           <RefreshCw className="w-7 h-7" />
         </button>
       </div>
