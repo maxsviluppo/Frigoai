@@ -1,15 +1,16 @@
 
 import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
 
-// Initialize the GoogleGenAI client using the API key from environment variables.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 export interface InventoryMatch {
   productName: string;
   confidence: number;
 }
 
+// Factory function per ottenere l'istanza AI solo quando necessario
+const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
+
 export const identifyProductFromImage = async (base64Images: string | string[]): Promise<any> => {
+  const ai = getAI();
   const model = 'gemini-3-flash-preview';
   const images = Array.isArray(base64Images) ? base64Images : [base64Images];
   
@@ -60,6 +61,7 @@ export const identifyProductFromImage = async (base64Images: string | string[]):
 };
 
 export const generateAIProductImage = async (productName: string): Promise<string | null> => {
+  const ai = getAI();
   const model = 'gemini-2.5-flash-image';
   const response = await ai.models.generateContent({
     model,
@@ -86,6 +88,7 @@ export const generateAIProductImage = async (productName: string): Promise<strin
 };
 
 export const matchImageToInventory = async (base64Image: string, inventoryNames: string[]): Promise<InventoryMatch[]> => {
+  const ai = getAI();
   const model = 'gemini-3-flash-preview';
   
   const response = await ai.models.generateContent({
@@ -134,6 +137,7 @@ export const matchImageToInventory = async (base64Image: string, inventoryNames:
 };
 
 export const editProductImage = async (base64Image: string, prompt: string): Promise<string | null> => {
+  const ai = getAI();
   const model = 'gemini-2.5-flash-image';
   const response = await ai.models.generateContent({
     model,

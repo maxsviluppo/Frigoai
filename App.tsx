@@ -27,12 +27,12 @@ import {
   CalendarDays,
   Filter
 } from 'lucide-react';
-import { InventoryItem, ViewState } from './types';
-import { Scanner } from './components/Scanner';
-import { PhotoEditor } from './components/PhotoEditor';
-import { VisualSearch } from './components/VisualSearch';
-import { generateAIProductImage } from './services/geminiService';
-import { loadInventoryFromDB, saveInventoryToDB, savePreference, getPreference } from './services/storageService';
+import { InventoryItem, ViewState } from './types.ts';
+import { Scanner } from './components/Scanner.tsx';
+import { PhotoEditor } from './components/PhotoEditor.tsx';
+import { VisualSearch } from './components/VisualSearch.tsx';
+import { generateAIProductImage } from './services/geminiService.ts';
+import { loadInventoryFromDB, saveInventoryToDB, savePreference, getPreference } from './services/storageService.ts';
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
@@ -47,20 +47,17 @@ const App: React.FC = () => {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   
-  // Stati per i filtri
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'fridge' | 'freezer' | 'dispensa'>('all');
   const [selectedExpiry, setSelectedExpiry] = useState<'all' | 'expired' | 'today' | 'near'>('all');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Mappatura etichette
   const categoryLabels: Record<string, string> = {
     fridge: 'Frigo',
     freezer: 'Freezer',
     dispensa: 'Dispensa'
   };
 
-  // Caricamento dati iniziali da IndexedDB
   useEffect(() => {
     const init = async () => {
       try {
@@ -92,7 +89,6 @@ const App: React.FC = () => {
     init();
   }, []);
 
-  // Salvataggio dati
   useEffect(() => {
     if (!isInitialLoad) {
       saveInventoryToDB(inventory).catch(err => console.error("Errore salvataggio DB:", err));
@@ -225,7 +221,6 @@ const App: React.FC = () => {
         </button>
       </div>
 
-      {/* Sezione Filtri UI */}
       <div className="space-y-4">
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
           <div className="flex-shrink-0 flex items-center p-2 rounded-xl bg-gray-100 text-gray-500">
@@ -438,10 +433,6 @@ const App: React.FC = () => {
                     </div>
                     <button onClick={requestNotificationPermission} className={`w-full sm:w-auto px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest ${notificationsEnabled ? 'bg-green-600 text-white shadow-lg' : 'bg-blue-600 text-white shadow-lg'}`}>{notificationsEnabled ? 'ATTIVE' : 'ATTIVA'}</button>
                   </div>
-                </section>
-                <section className="p-6 bg-white rounded-3xl border border-gray-100 shadow-sm">
-                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Storage Mode</p>
-                   <p className="text-xs font-bold text-blue-600">IndexedDB Attivo (Illimitato)</p>
                 </section>
               </div>
             )}
