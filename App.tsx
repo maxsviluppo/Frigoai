@@ -210,10 +210,26 @@ const App: React.FC = () => {
     setShowItemModal(true);
     setActiveView('inventory');
     
-    // Auto-generate AI image immediately after scan
     if (data.name) {
       handleGenerateAIImage(data.name);
     }
+  };
+
+  // Helper per formattare la data DD/MM
+  const formatDateCompact = (dateStr: string) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length < 3) return dateStr;
+    return `${parts[2]}/${parts[1]}`;
+  };
+
+  // Helper per determinare se la data è vicina alla scadenza (3 giorni)
+  const isNearExpiry = (dateStr: string) => {
+    const now = new Date();
+    now.setHours(0,0,0,0);
+    const expiry = new Date(dateStr);
+    const diff = expiry.getTime() - now.getTime();
+    return diff <= (86400000 * 3);
   };
 
   const Dashboard = () => (
@@ -245,7 +261,10 @@ const App: React.FC = () => {
                   {item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <Barcode className="w-6 h-6 text-slate-200 m-5" />}
                 </div>
                 <p className="text-[10px] font-bold text-slate-900 truncate w-full">{item.name}</p>
-                <p className="text-[8px] font-black text-rose-500 uppercase">{item.expiryDate.split('-').reverse().slice(0,2).join('/')}</p>
+                <div className="flex items-center justify-center gap-1.5">
+                  <span className="text-[8px] font-black text-rose-500 uppercase">{formatDateCompact(item.expiryDate)}</span>
+                  <span className="text-[8px] font-black text-slate-400">x{item.quantity}</span>
+                </div>
               </button>
             ))}
           </div>
@@ -288,11 +307,17 @@ const App: React.FC = () => {
         </div>
         <div className="flex gap-3 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide">
           {inventory.slice(0, 5).map(item => (
-            <button key={item.id} onClick={() => setPreviewItem(item)} className="flex-shrink-0 w-36 bg-white p-3 rounded-[1.75rem] border border-slate-50 shadow-sm flex items-center gap-3 active:scale-95 transition-all text-left group">
-              <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-50 flex-shrink-0 border border-slate-100">
-                {item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <Package className="w-4 h-4 text-slate-200 m-3" />}
+            <button key={item.id} onClick={() => setPreviewItem(item)} className="flex-shrink-0 w-44 bg-white p-3 rounded-[1.75rem] border border-slate-50 shadow-sm flex items-center gap-3 active:scale-95 transition-all text-left group">
+              <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-50 flex-shrink-0 border border-slate-100">
+                {item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <Package className="w-5 h-5 text-slate-200 m-3.5" />}
               </div>
-              <p className="text-[11px] font-black text-slate-900 truncate flex-1">{item.name}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-black text-slate-900 truncate">{item.name}</p>
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className="text-[9px] font-black text-slate-400">x{item.quantity}</span>
+                  <span className={`text-[8px] font-black ${isNearExpiry(item.expiryDate) ? 'text-rose-500' : 'text-slate-300'}`}>{formatDateCompact(item.expiryDate)}</span>
+                </div>
+              </div>
             </button>
           ))}
         </div>
@@ -335,7 +360,13 @@ const App: React.FC = () => {
                         </div>
                         <div className="min-w-0">
                           <h3 className="font-black text-slate-900 text-sm truncate">{item.name}</h3>
-                          <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md mt-1 inline-block ${categoryColors[item.category]}`}>{categoryLabels[item.category]}</span>
+                          <div className="flex items-center gap-3 mt-1">
+                             <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md ${categoryColors[item.category]}`}>{categoryLabels[item.category]}</span>
+                             <div className="flex items-center gap-1">
+                               <Clock className={`w-3 h-3 ${isNearExpiry(item.expiryDate) ? 'text-rose-500' : 'text-slate-300'}`} />
+                               <span className={`text-[9px] font-bold ${isNearExpiry(item.expiryDate) ? 'text-rose-500' : 'text-slate-400'}`}>{item.expiryDate}</span>
+                             </div>
+                          </div>
                         </div>
                       </div>
                       <div className={`px-3 py-1.5 rounded-xl font-black text-xs ${item.quantity <= 2 ? 'bg-rose-50 text-rose-600' : 'bg-slate-50 text-slate-900'}`}>x{item.quantity}</div>
@@ -357,7 +388,10 @@ const App: React.FC = () => {
                         <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center overflow-hidden border border-slate-100">
                           {item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <Package className="w-5 h-5 text-slate-200" />}
                         </div>
-                        <p className="font-black text-slate-900 text-sm">{item.name}</p>
+                        <div>
+                          <p className="font-black text-slate-900 text-sm">{item.name}</p>
+                          <p className="text-[9px] text-slate-400 font-bold">Giacenza: {item.quantity}</p>
+                        </div>
                       </div>
                       <button onClick={() => markAsBought(item.id)} className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center border border-emerald-100">
                         <CheckCircle className="w-5 h-5" />
@@ -392,7 +426,11 @@ const App: React.FC = () => {
             </div>
             <div className="text-center space-y-2">
               <h2 className="text-lg font-black text-slate-900 truncate">{previewItem.name}</h2>
-              <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-lg inline-block ${categoryColors[previewItem.category]}`}>{categoryLabels[previewItem.category]}</span>
+              <div className="flex items-center justify-center gap-2">
+                 <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-lg inline-block ${categoryColors[previewItem.category]}`}>{categoryLabels[previewItem.category]}</span>
+                 <span className="text-[9px] font-black text-slate-400">x{previewItem.quantity}</span>
+              </div>
+              <p className={`text-[10px] font-black uppercase mt-1 ${isNearExpiry(previewItem.expiryDate) ? 'text-rose-500' : 'text-slate-400'}`}>Scade: {previewItem.expiryDate}</p>
             </div>
             <div className="flex gap-3">
               <button onClick={() => setPreviewItem(null)} className="flex-1 py-4 bg-slate-100 text-slate-400 rounded-2xl font-black text-[10px] uppercase">Chiudi</button>
