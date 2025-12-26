@@ -9,6 +9,7 @@ export interface InventoryItem {
   image?: string;
   dateAdded: string;
   notes?: string;
+  onShoppingList?: boolean;
 }
 
 export interface ScanResult {
@@ -18,4 +19,4 @@ export interface ScanResult {
   category?: string;
 }
 
-export type ViewState = 'dashboard' | 'inventory' | 'scanner' | 'editor' | 'settings';
+export type ViewState = 'dashboard' | 'inventory' | 'scanner' | 'editor' | 'settings' | 'shopping';

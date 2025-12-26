@@ -6,15 +6,12 @@ export interface InventoryMatch {
   confidence: number;
 }
 
-// Funzione helper per pulire il JSON dalle risposte del modello
 const cleanJsonResponse = (text: string) => {
   return text.replace(/```json/g, "").replace(/```/g, "").trim();
 };
 
 export const identifyProductFromImage = async (base64Images: string | string[]): Promise<any> => {
-  // Use process.env.API_KEY directly and create new instance per call as required
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  // Utilizziamo gemini-3-flash-preview per l'OCR
   const model = 'gemini-3-flash-preview';
   const images = Array.isArray(base64Images) ? base64Images : [base64Images];
   
@@ -32,17 +29,18 @@ export const identifyProductFromImage = async (base64Images: string | string[]):
         parts: [
           ...imageParts,
           {
-            text: `AGISCI COME UN LETTORE OCR DI PRECISIONE PER CODICI A BARRE.
+            text: `AGISCI COME UN LETTORE DI CODICI A BARRE PROFESSIONALE.
             
-            ISTRUZIONI TASSATIVE:
-            1. INDIVIDUA il blocco del codice a barre (barre nere su fondo bianco).
-            2. LEGGI LETTERALMENTE le cifre stampate IMMEDIATAMENTE SOTTO le barre.
-            3. FORMATO: Solitamente sono 13 cifre (EAN-13) o 12 (UPC). Trascrivile tutte.
+            OPERAZIONI:
+            1. Scansiona l'immagine alla ricerca di un codice a barre (EAN-13, EAN-8, UPC).
+            2. Estrai il numero esatto.
+            3. Identifica il prodotto associato (marca e nome).
+            4. Se non c'è un codice a barre leggibile, prova a identificare il prodotto dall'etichetta visiva.
             
-            Restituisci JSON con:
-            - name: Nome preciso del prodotto.
-            - barcode: Solo la stringa numerica letta.
-            - category: Una tra 'fridge', 'freezer', 'dispensa'.`,
+            RESTITUISCI SEMPRE UN JSON VALIDO:
+            - name: Nome completo del prodotto.
+            - barcode: Solo i numeri (se presenti, altrimenti stringa vuota).
+            - category: 'fridge', 'freezer', o 'dispensa'.`,
           },
         ],
       },
@@ -55,13 +53,12 @@ export const identifyProductFromImage = async (base64Images: string | string[]):
             barcode: { type: Type.STRING },
             category: { type: Type.STRING }
           },
-          required: ["name", "barcode"]
+          required: ["name", "barcode", "category"]
         }
       }
     });
 
-    const jsonStr = response.text.trim();
-    return JSON.parse(cleanJsonResponse(jsonStr));
+    return JSON.parse(cleanJsonResponse(response.text));
   } catch (error) {
     console.error("Errore identifyProductFromImage:", error);
     throw error;
@@ -69,32 +66,19 @@ export const identifyProductFromImage = async (base64Images: string | string[]):
 };
 
 export const generateAIProductImage = async (productName: string): Promise<string | null> => {
-  // Use process.env.API_KEY directly and create new instance per call as required
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  // Utilizziamo gemini-2.5-flash-image per la generazione di immagini
   const model = 'gemini-2.5-flash-image'; 
   try {
     const response = await ai.models.generateContent({
       model,
       contents: {
-        parts: [
-          {
-            text: `Generate a professional, clean, high-quality studio photograph of ${productName} on a neutral light background. Packshot style, centered. Realistic lighting.`,
-          },
-        ],
+        parts: [{ text: `A professional studio packshot of ${productName}, white background, 4k, realistic.` }],
       },
-      config: {
-        imageConfig: {
-          aspectRatio: "1:1"
-        }
-      }
+      config: { imageConfig: { aspectRatio: "1:1" } }
     });
 
     for (const part of response.candidates[0].content.parts) {
-      // Find the image part as per guidelines
-      if (part.inlineData) {
-        return `data:image/png;base64,${part.inlineData.data}`;
-      }
+      if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
     }
     return null;
   } catch (error) {
@@ -104,24 +88,15 @@ export const generateAIProductImage = async (productName: string): Promise<strin
 };
 
 export const matchImageToInventory = async (base64Image: string, inventoryNames: string[]): Promise<InventoryMatch[]> => {
-  // Use process.env.API_KEY directly and create new instance per call as required
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const model = 'gemini-3-flash-preview';
-  
   try {
     const response = await ai.models.generateContent({
       model,
       contents: {
         parts: [
-          {
-            inlineData: {
-              mimeType: 'image/jpeg',
-              data: base64Image,
-            },
-          },
-          {
-            text: `Confronta l'immagine con questo inventario: ${inventoryNames.join(", ")}. Restituisci le corrispondenze in JSON.`,
-          },
+          { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+          { text: `Trova corrispondenze in questo inventario: ${inventoryNames.join(", ")}.` },
         ],
       },
       config: {
@@ -145,20 +120,15 @@ export const matchImageToInventory = async (base64Image: string, inventoryNames:
         }
       }
     });
-
-    const jsonStr = response.text.trim();
-    const data = JSON.parse(cleanJsonResponse(jsonStr));
+    const data = JSON.parse(cleanJsonResponse(response.text));
     return (data.matches || []).sort((a: any, b: any) => b.confidence - a.confidence);
   } catch (e) {
-    console.error("Errore matchImageToInventory:", e);
     return [];
   }
 };
 
 export const editProductImage = async (base64Image: string, prompt: string): Promise<string | null> => {
-  // Use process.env.API_KEY directly and create new instance per call as required
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  // Utilizziamo gemini-2.5-flash-image per l'editing
   const model = 'gemini-2.5-flash-image'; 
   try {
     const response = await ai.models.generateContent({
@@ -171,12 +141,10 @@ export const editProductImage = async (base64Image: string, prompt: string): Pro
       },
     });
     for (const part of response.candidates[0].content.parts) {
-      // Find the image part as per guidelines
       if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
     }
     return null;
   } catch (error) {
-    console.error("Errore editProductImage:", error);
     return null;
   }
 };
