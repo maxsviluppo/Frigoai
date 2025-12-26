@@ -15,8 +15,6 @@ import {
   Trash2,
   Bell,
   BellOff,
-  CheckCircle2,
-  TrendingDown,
   Camera,
   ChevronDown,
   ChevronUp,
@@ -27,8 +25,7 @@ import {
   Loader2,
   MapPin,
   CalendarDays,
-  Filter,
-  History
+  Filter
 } from 'lucide-react';
 import { InventoryItem, ViewState } from './types';
 import { Scanner } from './components/Scanner';
@@ -48,6 +45,7 @@ const App: React.FC = () => {
   const [showVisualSearch, setShowVisualSearch] = useState(false);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   
   // Stati per i filtri
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'fridge' | 'freezer' | 'dispensa'>('all');
@@ -94,16 +92,12 @@ const App: React.FC = () => {
     init();
   }, []);
 
-  // Salvataggio dati su IndexedDB ad ogni modifica
+  // Salvataggio dati
   useEffect(() => {
     if (!isInitialLoad) {
-      saveInventoryToDB(inventory).catch(err => {
-        console.error("Errore salvataggio DB:", err);
-      });
+      saveInventoryToDB(inventory).catch(err => console.error("Errore salvataggio DB:", err));
     }
   }, [inventory, isInitialLoad]);
-
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   const requestNotificationPermission = async () => {
     if (!('Notification' in window)) return;
@@ -177,8 +171,10 @@ const App: React.FC = () => {
   };
 
   const removeItem = (id: string) => {
-    setInventory(prev => prev.filter(i => i.id !== id));
-    if (expandedItemId === id) setExpandedItemId(null);
+    if(confirm("Vuoi eliminare questo prodotto?")) {
+      setInventory(prev => prev.filter(i => i.id !== id));
+      if (expandedItemId === id) setExpandedItemId(null);
+    }
   };
 
   const updateItem = (id: string, updates: Partial<InventoryItem>) => {
@@ -297,6 +293,7 @@ const App: React.FC = () => {
         ) : (
           filteredInventory.map(item => {
             const isExpanded = expandedItemId === item.id;
+            const isExpired = new Date(item.expiryDate) < new Date(new Date().setHours(0,0,0,0));
             return (
               <div key={item.id} className={`bg-white rounded-3xl shadow-sm border border-gray-100 transition-all duration-300 overflow-hidden ${isExpanded ? 'ring-2 ring-blue-500/10' : ''}`}>
                 <div className="p-4 cursor-pointer flex items-center justify-between min-h-[88px]" onClick={() => setExpandedItemId(isExpanded ? null : item.id)}>
@@ -313,7 +310,7 @@ const App: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex items-center space-x-3 ml-2 flex-shrink-0">
-                    <span className={`text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-tighter ${new Date(item.expiryDate) < new Date(new Date().setHours(0,0,0,0)) ? 'bg-red-50 text-red-600 shadow-sm shadow-red-100' : 'bg-gray-50 text-gray-500'}`}>{item.expiryDate}</span>
+                    <span className={`text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-tighter ${isExpired ? 'bg-red-50 text-red-600 shadow-sm shadow-red-100' : 'bg-gray-50 text-gray-500'}`}>{item.expiryDate}</span>
                     {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-300" /> : <ChevronDown className="w-4 h-4 text-gray-300" />}
                   </div>
                 </div>
@@ -331,12 +328,12 @@ const App: React.FC = () => {
                           </div>
                         </div>
                         <div className="space-y-3">
-                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5"><CalendarDays className="w-3 h-3" /> Aggiorna Scadenza:</p>
+                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5"><CalendarDays className="w-3 h-3" /> Scadenza Rapida:</p>
                           <input 
                             type="date" 
                             value={item.expiryDate}
                             onChange={(e) => updateItem(item.id, { expiryDate: e.target.value })}
-                            className="w-full p-3 bg-gray-50 border border-gray-100 rounded-2xl text-xs font-bold text-gray-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                            className="w-full p-3 bg-gray-50 border border-gray-100 rounded-2xl text-xs font-bold text-gray-900 outline-none focus:ring-2 focus:ring-blue-500/20 shadow-inner"
                           />
                         </div>
                       </div>
@@ -345,11 +342,11 @@ const App: React.FC = () => {
                         <div className="space-y-4">
                           <div className="flex items-start space-x-3">
                             <div className="p-1.5 bg-blue-50 rounded-lg"><Clock className="w-3.5 h-3.5 text-blue-600" /></div>
-                            <div><p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Registrato il</p><p className="text-xs font-bold text-gray-700">{item.dateAdded}</p></div>
+                            <div><p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Aggiunto il</p><p className="text-xs font-bold text-gray-700">{item.dateAdded}</p></div>
                           </div>
                           <div className="flex items-start space-x-3">
                             <div className="p-1.5 bg-gray-50 rounded-lg"><FileText className="w-3.5 h-3.5 text-gray-400" /></div>
-                            <div className="flex-1"><p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Note</p><p className="text-xs text-gray-500 italic leading-relaxed line-clamp-2">{item.notes || 'Nessuna nota.'}</p></div>
+                            <div className="flex-1"><p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Note AI</p><p className="text-xs text-gray-500 italic leading-relaxed line-clamp-2">{item.notes || 'Nessuna nota.'}</p></div>
                           </div>
                         </div>
                         <div className="flex flex-col justify-end gap-3">
@@ -402,7 +399,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 <section>
-                  <h2 className="text-lg font-black tracking-tight text-gray-800 mb-4">Zone</h2>
+                  <h2 className="text-lg font-black tracking-tight text-gray-800 mb-4">Zone di Conservazione</h2>
                   <div className="grid grid-cols-3 gap-3">
                     {['fridge', 'freezer', 'dispensa'].map(k => (
                       <div key={k} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 text-center">
@@ -439,8 +436,12 @@ const App: React.FC = () => {
                       <div className={`p-5 rounded-3xl ${notificationsEnabled ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-300'}`}>{notificationsEnabled ? <Bell className="w-8 h-8" /> : <BellOff className="w-8 h-8" />}</div>
                       <div><p className="font-black text-gray-900 text-lg">Alert Scadenze</p><p className="text-sm text-gray-500 font-medium">Avviso 3 giorni prima</p></div>
                     </div>
-                    <button onClick={requestNotificationPermission} className={`w-full sm:w-auto px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest ${notificationsEnabled ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'}`}>{notificationsEnabled ? 'ATTIVE' : 'ATTIVA'}</button>
+                    <button onClick={requestNotificationPermission} className={`w-full sm:w-auto px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest ${notificationsEnabled ? 'bg-green-600 text-white shadow-lg' : 'bg-blue-600 text-white shadow-lg'}`}>{notificationsEnabled ? 'ATTIVE' : 'ATTIVA'}</button>
                   </div>
+                </section>
+                <section className="p-6 bg-white rounded-3xl border border-gray-100 shadow-sm">
+                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Storage Mode</p>
+                   <p className="text-xs font-bold text-blue-600">IndexedDB Attivo (Illimitato)</p>
                 </section>
               </div>
             )}
@@ -448,7 +449,6 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Navigazione */}
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-2xl bg-white/95 backdrop-blur-2xl border-t border-gray-100 px-8 py-5 flex items-center justify-between z-40 rounded-t-[2.5rem] shadow-xl">
         <button onClick={() => setActiveView('dashboard')} className={`flex flex-col items-center space-y-1.5 ${activeView === 'dashboard' ? 'text-blue-600' : 'text-gray-300'}`}><LayoutDashboard className="w-6 h-6" /><span className="text-[9px] font-black uppercase">Home</span></button>
         <button onClick={() => setActiveView('inventory')} className={`flex flex-col items-center space-y-1.5 ${activeView === 'inventory' ? 'text-blue-600' : 'text-gray-300'}`}><Package className="w-6 h-6" /><span className="text-[9px] font-black uppercase">Scorte</span></button>
@@ -457,7 +457,6 @@ const App: React.FC = () => {
         <button onClick={() => setActiveView('settings')} className={`flex flex-col items-center space-y-1.5 ${activeView === 'settings' ? 'text-blue-600' : 'text-gray-300'}`}><Settings className="w-6 h-6" /><span className="text-[9px] font-black uppercase">Setup</span></button>
       </nav>
 
-      {/* MODAL EDIT/ADD */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
@@ -479,7 +478,7 @@ const App: React.FC = () => {
               </div>
               <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) { const r = new FileReader(); r.onloadend = () => setEditingItem(prev => ({ ...prev, image: r.result as string })); r.readAsDataURL(file); } }} />
               <div className="space-y-4">
-                <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest">Nome</label><input type="text" value={editingItem?.name || ''} onChange={(e) => setEditingItem(prev => ({ ...prev, name: e.target.value }))} className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500/20" placeholder="Es: Latte Fresco" /></div>
+                <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest">Nome Prodotto</label><input type="text" value={editingItem?.name || ''} onChange={(e) => setEditingItem(prev => ({ ...prev, name: e.target.value }))} className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500/20 shadow-inner" placeholder="Es: Latte Fresco" /></div>
                 <div className="grid grid-cols-2 gap-4">
                   <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest">Zona</label><select value={editingItem?.category || 'fridge'} onChange={(e) => setEditingItem(prev => ({ ...prev, category: e.target.value as any }))} className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none"><option value="fridge">Frigo</option><option value="freezer">Freezer</option><option value="dispensa">Dispensa</option></select></div>
                   <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest">Scadenza</label><input type="date" value={editingItem?.expiryDate || ''} onChange={(e) => setEditingItem(prev => ({ ...prev, expiryDate: e.target.value }))} className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none" /></div>
